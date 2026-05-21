@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import path from "node:path";
 import Stripe from "stripe";
 import {
   createId,
@@ -8,12 +9,15 @@ import {
   updateStore,
   verifyPassword,
 } from "./store.js";
-import { getCurrentTicketSchedule, getPreviousTicketSchedule, scoreTicket } from "./nhl.js";
+import { getCurrentTicketSchedule, getPreviousTicketSchedule } from "./nhl.js";
+import { createTicketRecord } from "./tickets.js";
+import { calculateWinners } from "./winners.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4242);
 const ticketPriceCents = Number(process.env.TICKET_PRICE_CENTS || 300);
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const clientBuildPath = path.resolve("dist");
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (request, response) => {
   if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -123,16 +127,12 @@ app.post("/api/tickets", requireAuth, async (request, response) => {
   }
 
   const ticket = await updateStore(async (store) => {
-    const newTicket = {
-      id: createId("ticket"),
+    const newTicket = createTicketRecord({
       userId: request.user.id,
       ticketId: schedule.ticketId,
       picks,
-      status: stripe ? "pending_payment" : "paid",
-      stripeSessionId: null,
-      submittedAt: new Date().toISOString(),
-      paidAt: stripe ? null : new Date().toISOString(),
-    };
+      paymentRequired: Boolean(stripe),
+    });
 
     store.tickets.push(newTicket);
     return newTicket;
@@ -232,29 +232,18 @@ app.post("/api/dev/pay/:ticketId", requireAuth, async (request, response) => {
 app.get("/api/winner/latest", async (_request, response) => {
   const schedule = await getPreviousTicketSchedule();
   const store = await readStore();
-  const eligibleTickets = store.tickets.filter(
-    (ticket) => ticket.ticketId === schedule.ticketId && ticket.status === "paid",
-  );
-  const scoredTickets = eligibleTickets
-    .map((ticket) => ({
-      ticket,
-      score: scoreTicket(ticket, schedule.games),
-      user: store.users.find((user) => user.id === ticket.userId),
-    }))
-    .filter((entry) => entry.score.possible > 0)
-    .sort((a, b) => b.score.correct - a.score.correct);
-  const bestScore = scoredTickets[0]?.score.correct;
-  const winners = scoredTickets.filter((entry) => entry.score.correct === bestScore);
+  response.json(calculateWinners({ tickets: store.tickets, users: store.users, schedule }));
+});
 
-  response.json({
-    ticketId: schedule.ticketId,
-    possible: scoredTickets[0]?.score.possible || 0,
-    winners: winners.map((entry) => ({
-      name: entry.user?.name || "Unknown",
-      correct: entry.score.correct,
-      ticketId: entry.ticket.id,
-    })),
-  });
+app.use(express.static(clientBuildPath));
+
+app.use((request, response, next) => {
+  if (request.path.startsWith("/api/")) {
+    next();
+    return;
+  }
+
+  response.sendFile(path.join(clientBuildPath, "index.html"));
 });
 
 app.listen(port, () => {

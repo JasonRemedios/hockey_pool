@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 
-const DATA_DIR = path.resolve("data");
-const DATA_FILE = path.join(DATA_DIR, "pool.json");
+const DATA_FILE = process.env.HOCKEY_POOL_DATA_FILE || path.resolve("data", "pool.json");
+const DATA_DIR = path.dirname(DATA_FILE);
 
 const emptyStore = {
   users: [],
