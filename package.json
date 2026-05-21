@@ -1,0 +1,20 @@
+{
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "client": "vite --host 127.0.0.1",
+    "server": "node server/index.js",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "^9.2.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "stripe": "^22.1.1",
+    "vite": "latest"
+  }
+}
