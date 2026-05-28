@@ -53,21 +53,10 @@ input {
   padding-bottom: 12px;
 }
 
-.logo-mark {
-  width: 66px;
-  height: 66px;
-  border: 2px solid #1f1f1f;
-  display: grid;
-  grid-template-columns: 1fr 1.2fr 1fr;
-  align-items: center;
-  justify-items: center;
-  font-size: 16px;
-  transform: skew(-8deg);
-}
-
-.logo-mark strong {
-  font-size: 26px;
-  line-height: 1;
+.association-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
 }
 
 .association {
@@ -395,7 +384,7 @@ input:focus {
     grid-template-columns: 1fr;
   }
 
-  .logo-mark {
+  .association-logo {
     display: none;
   }
 

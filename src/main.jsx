@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Circle, LogOut, RotateCcw } from "lucide-react";
+import logoUrl from "./assets/logo.jpg";
 import "./styles.css";
 
 const TOKEN_KEY = "hockeyPoolSession";
@@ -165,22 +166,14 @@ function App() {
     <main className="page-shell">
       <section className="ticket" aria-label="Trinity-Placentia Minor Hockey Association lottery ticket">
         <header className="ticket-header">
-          <div className="logo-mark" aria-hidden="true">
-            <span>T</span>
-            <strong>TP</strong>
-            <span>M</span>
-          </div>
+          <img className="association-logo" src={logoUrl} alt="Trinity Placentia Minor Hockey logo" />
 
           <div className="association">
             <p>TRINITY-PLACENTIA MINOR HOCKEY ASSOCIATION</p>
             <p>P.O. Box 666, Blaketown, NL A0B 1C0</p>
           </div>
 
-          <div className="logo-mark" aria-hidden="true">
-            <span>T</span>
-            <strong>TP</strong>
-            <span>M</span>
-          </div>
+          <img className="association-logo" src={logoUrl} alt="" aria-hidden="true" />
         </header>
 
         <section className="ticket-info">
