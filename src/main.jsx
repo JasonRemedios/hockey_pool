@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { loadStripe } from "@stripe/stripe-js";
 import { Circle, LogOut, RotateCcw } from "lucide-react";
 import logoUrl from "./assets/logo.jpg";
 import "./styles.css";
@@ -14,6 +15,9 @@ function App() {
   const [picks, setPicks] = useState({});
   const [schedule, setSchedule] = useState(null);
   const [winner, setWinner] = useState(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState("");
+  const [paymentSession, setPaymentSession] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -23,12 +27,14 @@ function App() {
     setError("");
 
     try {
-      const [scheduleData, winnerData] = await Promise.all([
+      const [scheduleData, winnerData, configData] = await Promise.all([
         apiFetch("/api/schedule/current"),
         apiFetch("/api/winner/latest"),
+        apiFetch("/api/config"),
       ]);
       setSchedule(scheduleData);
       setWinner(winnerData);
+      setStripePublishableKey(configData.stripePublishableKey || "");
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -73,6 +79,11 @@ function App() {
       .finally(() => window.history.replaceState({}, "", window.location.pathname));
   }, [token]);
 
+  const stripePromise = useMemo(
+    () => (stripePublishableKey ? loadStripe(stripePublishableKey) : null),
+    [stripePublishableKey],
+  );
+
   const gameDays = schedule?.days || [];
   const games = schedule?.games || [];
   const gameIds = useMemo(() => games.map((game) => String(game.id)), [games]);
@@ -106,6 +117,7 @@ function App() {
   async function submitTicket() {
     setError("");
     setMessage("");
+    setPaymentSession(null);
 
     if (!user) {
       setError("Please sign in before submitting a ticket.");
@@ -118,6 +130,7 @@ function App() {
     }
 
     try {
+      setSubmitting(true);
       const data = await apiFetch("/api/tickets", {
         method: "POST",
         token,
@@ -128,13 +141,47 @@ function App() {
         const checkout = await apiFetch(`/api/tickets/${data.ticket.id}/checkout`, {
           method: "POST",
           token,
+          body: { embedded: Boolean(stripePublishableKey) },
         });
+
+        if (checkout.clientSecret) {
+          setPaymentSession({
+            ticketId: data.ticket.id,
+            sessionId: checkout.sessionId,
+            clientSecret: checkout.clientSecret,
+          });
+          setMessage("Complete payment below. You can submit another ticket after payment is received.");
+          return;
+        }
+
         window.location.href = checkout.url;
       } else {
         setMessage("Ticket submitted and marked paid in local dev mode.");
+        setPicks({});
       }
     } catch (submitError) {
       setError(submitError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function completeEmbeddedPayment(sessionId) {
+    if (!paymentSession) {
+      return;
+    }
+
+    try {
+      const verified = await apiFetch(`/api/tickets/${paymentSession.ticketId}/verify-payment`, {
+        method: "POST",
+        token,
+        body: { sessionId },
+      });
+      setPaymentSession(null);
+      setPicks({});
+      setMessage(`Payment received. Ticket ${verified.ticket.ticketId} is submitted. You can play another ticket.`);
+    } catch (paymentError) {
+      setError(paymentError.message);
     }
   }
 
@@ -255,6 +302,15 @@ function App() {
           <p className={`form-message ${error ? "error" : "success"}`}>{error || message}</p>
         )}
 
+        {paymentSession && stripePromise && (
+          <EmbeddedCheckoutPanel
+            clientSecret={paymentSession.clientSecret}
+            onCancel={() => setPaymentSession(null)}
+            onComplete={() => completeEmbeddedPayment(paymentSession.sessionId)}
+            stripePromise={stripePromise}
+          />
+        )}
+
         <section className="ticket-footer">
           <p>
             Friday, Saturday, and Sunday games only. Entries must be in before the first ticket game starts.
@@ -264,7 +320,7 @@ function App() {
           </p>
           <div className="footer-actions">
             <button type="button" className="submit-ticket" onClick={submitTicket}>
-              Submit & Pay
+              {submitting ? "Submitting..." : "Submit & Pay"}
             </button>
           </div>
         </section>
@@ -279,6 +335,58 @@ function App() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function EmbeddedCheckoutPanel({ clientSecret, onCancel, onComplete, stripePromise }) {
+  const checkoutRef = useRef(null);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    let active = true;
+    let embeddedCheckout = null;
+
+    async function mountCheckout() {
+      const stripe = await stripePromise;
+      if (!stripe || !active || !checkoutRef.current) {
+        return;
+      }
+
+      const checkout = await stripe.initEmbeddedCheckout({
+        clientSecret,
+        onComplete: () => onCompleteRef.current(),
+      });
+
+      if (active && checkoutRef.current) {
+        embeddedCheckout = checkout;
+        checkout.mount(checkoutRef.current);
+      } else {
+        checkout.destroy();
+      }
+    }
+
+    mountCheckout();
+
+    return () => {
+      active = false;
+      embeddedCheckout?.destroy();
+    };
+  }, [clientSecret, stripePromise]);
+
+  return (
+    <section className="embedded-checkout" aria-label="Secure card payment">
+      <div className="embedded-checkout-header">
+        <h2>Payment</h2>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+      <div ref={checkoutRef} />
+    </section>
   );
 }
 

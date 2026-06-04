@@ -94,6 +94,7 @@ test("account, database, and payment APIs work together", async () => {
   const dataFile = await makeDataFile("api");
   const schedule = makeFutureSchedule();
   delete process.env.DATABASE_URL;
+  delete process.env.STRIPE_PUBLISHABLE_KEY;
   process.env.HOCKEY_POOL_DATA_FILE = dataFile;
 
   const [{ createPoolApp }, { initializeStore, readStore }] = await Promise.all([
@@ -170,13 +171,16 @@ test("account, database, and payment APIs work together", async () => {
   const stripeSession = {
     id: "cs_test_123",
     url: "https://checkout.stripe.test/pay/cs_test_123",
+    client_secret: "cs_test_123_secret_abc",
     client_reference_id: null,
     payment_status: "paid",
   };
+  const stripeSessionPayloads = [];
   const stripeClient = {
     checkout: {
       sessions: {
         create: async (payload) => {
+          stripeSessionPayloads.push(payload);
           stripeSession.client_reference_id = payload.client_reference_id;
           return stripeSession;
         },
@@ -214,6 +218,8 @@ test("account, database, and payment APIs work together", async () => {
       token: loggedIn.token,
     });
     assert.equal(checkout.url, stripeSession.url);
+    assert.equal(stripeSessionPayloads.at(-1).ui_mode, undefined);
+    assert.match(stripeSessionPayloads.at(-1).success_url, /payment-success/);
 
     const verified = await apiRequest(stripeServer.url, `/api/tickets/${submitted.ticket.id}/verify-payment`, {
       method: "POST",
@@ -223,7 +229,26 @@ test("account, database, and payment APIs work together", async () => {
 
     assert.equal(verified.ticket.status, "paid");
     assert.match(verified.ticket.paidAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_embedded";
+    const embeddedTicket = await apiRequest(stripeServer.url, "/api/tickets", {
+      method: "POST",
+      token: loggedIn.token,
+      body: { picks: { 101: "BOSTON", 102: "TORONTO" } },
+    });
+    const embeddedCheckout = await apiRequest(stripeServer.url, `/api/tickets/${embeddedTicket.ticket.id}/checkout`, {
+      method: "POST",
+      token: loggedIn.token,
+      body: { embedded: true },
+    });
+
+    assert.equal(embeddedCheckout.clientSecret, stripeSession.client_secret);
+    assert.equal(embeddedCheckout.sessionId, stripeSession.id);
+    assert.equal(stripeSessionPayloads.at(-1).ui_mode, "embedded");
+    assert.equal(stripeSessionPayloads.at(-1).redirect_on_completion, "never");
+    assert.equal(stripeSessionPayloads.at(-1).success_url, undefined);
   } finally {
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
     await stripeServer.close();
   }
 });

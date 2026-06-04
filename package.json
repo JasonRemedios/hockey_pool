@@ -9,6 +9,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@stripe/stripe-js": "^9.7.0",
     "@vitejs/plugin-react": "latest",
     "concurrently": "^9.2.1",
     "dotenv": "^17.4.2",

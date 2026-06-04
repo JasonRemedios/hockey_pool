@@ -54,6 +54,12 @@ export function createPoolApp({
     response.json({ ok: true });
   });
 
+  app.get("/api/config", (_request, response) => {
+    response.json({
+      stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || "",
+    });
+  });
+
   app.get("/api/schedule/current", async (_request, response) => {
     response.json(await currentTicketSchedule());
   });
@@ -166,7 +172,8 @@ export function createPoolApp({
     }
 
     const origin = request.headers.origin || `http://127.0.0.1:${port}`;
-    const session = await stripeClient.checkout.sessions.create({
+    const useEmbeddedCheckout = Boolean(request.body?.embedded && process.env.STRIPE_PUBLISHABLE_KEY);
+    const sessionPayload = {
       mode: "payment",
       client_reference_id: ticket.id,
       customer_email: request.user.email,
@@ -186,14 +193,29 @@ export function createPoolApp({
         ticketId: ticket.id,
         userId: request.user.id,
       },
-      success_url: `${origin}/payment-success?ticket=${ticket.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/payment-cancelled?ticket=${ticket.id}`,
-    });
+    };
+
+    if (useEmbeddedCheckout) {
+      sessionPayload.ui_mode = "embedded";
+      sessionPayload.redirect_on_completion = "never";
+    } else {
+      sessionPayload.success_url = `${origin}/payment-success?ticket=${ticket.id}&session_id={CHECKOUT_SESSION_ID}`;
+      sessionPayload.cancel_url = `${origin}/payment-cancelled?ticket=${ticket.id}`;
+    }
+
+    const session = await stripeClient.checkout.sessions.create(sessionPayload);
 
     await updateStore(async (draft) => {
       const draftTicket = draft.tickets.find((storedTicket) => storedTicket.id === ticket.id);
       draftTicket.stripeSessionId = session.id;
     });
+
+    if (useEmbeddedCheckout) {
+      return response.json({
+        clientSecret: session.client_secret,
+        sessionId: session.id,
+      });
+    }
 
     response.json({ url: session.url });
   });
@@ -211,6 +233,10 @@ export function createPoolApp({
     }
 
     const ticket = await markTicketPaidForStripeSession(session.id);
+    if (!ticket) {
+      return response.status(404).json({ error: "Ticket not found for completed payment." });
+    }
+
     response.json({ ticket: sanitizeTicket(ticket) });
   });
 
