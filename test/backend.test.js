@@ -244,7 +244,7 @@ test("account, database, and payment APIs work together", async () => {
 
     assert.equal(embeddedCheckout.clientSecret, stripeSession.client_secret);
     assert.equal(embeddedCheckout.sessionId, stripeSession.id);
-    assert.equal(stripeSessionPayloads.at(-1).ui_mode, "embedded");
+    assert.equal(stripeSessionPayloads.at(-1).ui_mode, "embedded_page");
     assert.equal(stripeSessionPayloads.at(-1).redirect_on_completion, "never");
     assert.equal(stripeSessionPayloads.at(-1).success_url, undefined);
   } finally {

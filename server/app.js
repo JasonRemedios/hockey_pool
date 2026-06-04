@@ -196,14 +196,19 @@ export function createPoolApp({
     };
 
     if (useEmbeddedCheckout) {
-      sessionPayload.ui_mode = "embedded";
+      sessionPayload.ui_mode = "embedded_page";
       sessionPayload.redirect_on_completion = "never";
     } else {
       sessionPayload.success_url = `${origin}/payment-success?ticket=${ticket.id}&session_id={CHECKOUT_SESSION_ID}`;
       sessionPayload.cancel_url = `${origin}/payment-cancelled?ticket=${ticket.id}`;
     }
 
-    const session = await stripeClient.checkout.sessions.create(sessionPayload);
+    let session;
+    try {
+      session = await stripeClient.checkout.sessions.create(sessionPayload);
+    } catch (checkoutError) {
+      return response.status(400).json({ error: checkoutError.message || "Unable to start checkout." });
+    }
 
     await updateStore(async (draft) => {
       const draftTicket = draft.tickets.find((storedTicket) => storedTicket.id === ticket.id);
