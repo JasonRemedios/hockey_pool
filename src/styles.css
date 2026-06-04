@@ -340,9 +340,8 @@ input:focus {
 }
 
 .pick-counter {
-  position: absolute;
-  right: 28px;
-  bottom: 28px;
+  width: fit-content;
+  margin: 14px 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -409,10 +408,6 @@ input:focus {
 
   .pick-counter {
     position: sticky;
-    margin-top: 14px;
-    width: fit-content;
-    margin-left: auto;
-    right: auto;
     bottom: 12px;
   }
 }
