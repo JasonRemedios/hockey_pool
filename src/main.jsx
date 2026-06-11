@@ -341,6 +341,7 @@ function App() {
 function EmbeddedCheckoutPanel({ clientSecret, onCancel, onComplete, stripePromise }) {
   const checkoutRef = useRef(null);
   const onCompleteRef = useRef(onComplete);
+  const [mountError, setMountError] = useState("");
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -351,21 +352,30 @@ function EmbeddedCheckoutPanel({ clientSecret, onCancel, onComplete, stripePromi
     let embeddedCheckout = null;
 
     async function mountCheckout() {
-      const stripe = await stripePromise;
-      if (!stripe || !active || !checkoutRef.current) {
-        return;
-      }
+      try {
+        const stripe = await stripePromise;
+        if (!stripe || !active || !checkoutRef.current) {
+          return;
+        }
 
-      const checkout = await stripe.initEmbeddedCheckout({
-        clientSecret,
-        onComplete: () => onCompleteRef.current(),
-      });
+        const options = {
+          fetchClientSecret: async () => clientSecret,
+          onComplete: () => onCompleteRef.current(),
+        };
+        const checkout = stripe.createEmbeddedCheckoutPage
+          ? await stripe.createEmbeddedCheckoutPage(options)
+          : await stripe.initEmbeddedCheckout(options);
 
-      if (active && checkoutRef.current) {
-        embeddedCheckout = checkout;
-        checkout.mount(checkoutRef.current);
-      } else {
-        checkout.destroy();
+        if (active && checkoutRef.current) {
+          embeddedCheckout = checkout;
+          checkout.mount(checkoutRef.current);
+        } else {
+          checkout.destroy();
+        }
+      } catch (checkoutError) {
+        if (active) {
+          setMountError(checkoutError.message || "Unable to load payment form.");
+        }
       }
     }
 
@@ -385,7 +395,8 @@ function EmbeddedCheckoutPanel({ clientSecret, onCancel, onComplete, stripePromi
           Cancel
         </button>
       </div>
-      <div ref={checkoutRef} />
+      {mountError && <p className="embedded-checkout-error">{mountError}</p>}
+      <div className="embedded-checkout-mount" ref={checkoutRef} />
     </section>
   );
 }

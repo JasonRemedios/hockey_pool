@@ -313,6 +313,16 @@ input:focus {
   outline: none;
 }
 
+.embedded-checkout-error {
+  margin: 0 0 12px;
+  color: #9f1d1d;
+  font-weight: 800;
+}
+
+.embedded-checkout-mount {
+  min-height: 420px;
+}
+
 .matchup {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
